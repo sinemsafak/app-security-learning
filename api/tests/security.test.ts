@@ -2,7 +2,7 @@
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import request from "supertest";
 
-let app: (typeof import("express"))["default"] extends never ? never : any;
+let app: import("express").Express;
 let db: any;
 
 process.env.JWT_SECRET = "test-only-secret-value-0123456789abcdef";
