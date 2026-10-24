@@ -26,8 +26,8 @@ async function apiRequest<T>(
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...options.headers
-    }
+      ...options.headers,
+    },
   });
 
   if (!response.ok) {
@@ -58,26 +58,56 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
-    loadNotes(token).catch((error: Error) => setMessage(error.message));
+
+    const accessToken = token;
+    let cancelled = false;
+
+    async function fetchNotes() {
+      try {
+        const data = await apiRequest<{ notes: Note[] }>(
+          "/notes",
+          accessToken
+        );
+
+        if (!cancelled) {
+          setNotes(data.notes);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setMessage(
+            error instanceof Error ? error.message : "İstek başarısız."
+          );
+        }
+      }
+    }
+
+    void fetchNotes();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
-  async function authenticate(event: React.FormEvent) {
+  async function authenticate(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
 
     try {
-      const path = mode === "register" ? "/auth/register" : "/auth/login";
-      const payload = mode === "register"
-        ? { email, password, displayName }
-        : { email, password };
+      const path =
+        mode === "register" ? "/auth/register" : "/auth/login";
+
+      const payload =
+        mode === "register"
+          ? { email, password, displayName }
+          : { email, password };
 
       const data = await apiRequest<{
         user: User;
         accessToken: string;
       }>(path, undefined, {
         method: "POST",
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       setUser(data.user);
@@ -85,26 +115,32 @@ export default function App() {
       setPassword("");
       setMessage("Giriş başarılı.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "İstek başarısız.");
+      setMessage(
+        error instanceof Error ? error.message : "İstek başarısız."
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  async function addNote(event: React.FormEvent) {
+  async function addNote(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (!token || !newNote.trim()) return;
 
     try {
       await apiRequest("/notes", token, {
         method: "POST",
-        body: JSON.stringify({ content: newNote })
+        body: JSON.stringify({ content: newNote }),
       });
+
       setNewNote("");
       await loadNotes(token);
       setMessage("Not kaydedildi.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "İstek başarısız.");
+      setMessage(
+        error instanceof Error ? error.message : "İstek başarısız."
+      );
     }
   }
 
@@ -112,13 +148,18 @@ export default function App() {
     if (!token) return;
 
     try {
-      await apiRequest(`/notes/${encodeURIComponent(id)}`, token, {
-        method: "DELETE"
-      });
+      await apiRequest(
+        `/notes/${encodeURIComponent(id)}`,
+        token,
+        { method: "DELETE" }
+      );
+
       await loadNotes(token);
       setMessage("Not silindi.");
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "İstek başarısız.");
+      setMessage(
+        error instanceof Error ? error.message : "İstek başarısız."
+      );
     }
   }
 
@@ -126,6 +167,8 @@ export default function App() {
     setToken(null);
     setUser(null);
     setNotes([]);
+    setPassword("");
+    setNewNote("");
     setMessage("Oturum kapatıldı.");
   }
 
@@ -134,21 +177,26 @@ export default function App() {
       <header>
         <p className="eyebrow">APP SECURITY LEARNING</p>
         <h1>Güvenli profil uygulaması</h1>
-        <p>Özel notlar yalnızca sunucuda doğrulanan hesap sahibine açıktır.</p>
+        <p>
+          Özel notlar yalnızca sunucuda doğrulanan hesap sahibine açıktır.
+        </p>
       </header>
 
-      <p role="status" aria-live="polite">{message}</p>
+      <p role="status" aria-live="polite">
+        {message}
+      </p>
 
       {!token ? (
         <section className="panel">
           <h2>{mode === "register" ? "Hesap oluştur" : "Giriş yap"}</h2>
+
           <form onSubmit={authenticate}>
             <label>
               E-posta
               <input
                 type="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(event) => setEmail(event.target.value)}
                 autoComplete="email"
                 required
                 maxLength={254}
@@ -160,7 +208,8 @@ export default function App() {
                 Görünen ad
                 <input
                   value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
+                  onChange={(event) => setDisplayName(event.target.value)}
+                  autoComplete="name"
                   required
                   maxLength={80}
                 />
@@ -172,48 +221,72 @@ export default function App() {
               <input
                 type="password"
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete={mode === "register" ? "new-password" : "current-password"}
+                onChange={(event) => setPassword(event.target.value)}
+                autoComplete={
+                  mode === "register" ? "new-password" : "current-password"
+                }
                 minLength={mode === "register" ? 12 : 1}
                 maxLength={128}
                 required
               />
             </label>
 
-            <button disabled={busy}>
-              {busy ? "İşleniyor..." : mode === "register" ? "Kayıt ol" : "Giriş yap"}
+            <button type="submit" disabled={busy}>
+              {busy
+                ? "İşleniyor..."
+                : mode === "register"
+                  ? "Kayıt ol"
+                  : "Giriş yap"}
             </button>
           </form>
 
-          <button className="secondary" onClick={() => {
-            setMode(mode === "register" ? "login" : "register");
-            setMessage("");
-          }}>
-            {mode === "register" ? "Zaten hesabım var" : "Yeni hesap oluştur"}
+          <button
+            type="button"
+            className="secondary"
+            onClick={() => {
+              setMode(mode === "register" ? "login" : "register");
+              setMessage("");
+            }}
+          >
+            {mode === "register"
+              ? "Zaten hesabım var"
+              : "Yeni hesap oluştur"}
           </button>
         </section>
       ) : (
         <section className="panel">
           <div className="heading-row">
             <h2>Profilim</h2>
-            <button className="secondary" onClick={logout}>Çıkış yap</button>
+            <button
+              type="button"
+              className="secondary"
+              onClick={logout}
+            >
+              Çıkış yap
+            </button>
           </div>
 
-          <p><strong>Görünen ad:</strong> {user?.displayName}</p>
-          <p><strong>E-posta:</strong> {user?.email}</p>
+          <p>
+            <strong>Görünen ad:</strong> {user?.displayName}
+          </p>
+          <p>
+            <strong>E-posta:</strong> {user?.email}
+          </p>
 
           <h2>Özel notlarım</h2>
+
           <form onSubmit={addNote}>
             <label>
               Yeni not
               <textarea
                 value={newNote}
-                onChange={(e) => setNewNote(e.target.value)}
+                onChange={(event) => setNewNote(event.target.value)}
                 maxLength={5000}
                 required
               />
             </label>
-            <button>Not ekle</button>
+
+            <button type="submit">Not ekle</button>
           </form>
 
           {notes.length === 0 ? (
@@ -224,6 +297,7 @@ export default function App() {
                 <li key={note.id}>
                   <span>{note.content}</span>
                   <button
+                    type="button"
                     className="secondary"
                     onClick={() => deleteNote(note.id)}
                     aria-label="Notu sil"
